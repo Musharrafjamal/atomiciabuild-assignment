@@ -1,35 +1,32 @@
 import { readFileSync } from "node:fs";
 import { config } from "dotenv";
-import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 import { closeClient, getDb } from "@/lib/db/client";
 import { ensureIndexes } from "@/lib/db/indexes";
+import { hashPassword } from "@/lib/auth/password";
+import { COLLECTIONS, type UserDoc } from "@/lib/db/schema";
+import { importShiftsCsv, importStaffCsv } from "@/lib/import/run";
 import {
-  COLLECTIONS,
-  ZERO_COUNT,
-  type ImportReportDoc,
-  type ShiftDoc,
-  type UserDoc,
-} from "@/lib/db/schema";
-import { importShiftsCsv, importStaffCsv, type ImportResult } from "@/lib/import/run";
+  IMPORTED_STAFF_PASSWORD,
+  persistShiftsImport,
+  persistStaffImport,
+} from "@/lib/import/persist";
 
 config({ path: ".env.local", quiet: true });
 
 /**
  * Seeds the database by running the *same* import pipeline the manager's CSV
- * upload uses. Nothing here parses CSV itself, so the seeded data and an uploaded
- * file are guaranteed to be treated identically.
+ * upload uses -- the same parsing in src/lib/import/run.ts and the same writing in
+ * src/lib/import/persist.ts. Nothing here parses or inserts on its own, so seeded
+ * data and uploaded data cannot be treated differently, and the seeded report on
+ * the Import page is produced by the code path an upload exercises.
  *
- * Idempotent by default: if the database already has users it exits without
- * touching anything, so restarting the stack does not discard work in progress.
- * Set FORCE_RESEED=true to wipe and re-import.
+ * Idempotent by default: exits untouched if users already exist, so restarting the
+ * stack does not discard work. FORCE_RESEED=true wipes and re-imports.
  */
 
-/** Dev credentials. Documented in the README; not secrets. */
 export const MANAGER_EMAIL = "manager@clinic.test";
 const MANAGER_PASSWORD = "manager1234";
-const STAFF_PASSWORD = "staff1234";
-const BCRYPT_COST = 10;
 
 async function main() {
   const force = process.env.FORCE_RESEED === "true";
@@ -55,120 +52,60 @@ async function main() {
 
   await ensureIndexes(db);
 
-  const staffCsv = readFileSync("data/staff.csv", "utf8");
-  const shiftsCsv = readFileSync("data/shifts.csv", "utf8");
-
-  const staffResult = importStaffCsv(staffCsv);
-  const shiftsResult = importShiftsCsv(shiftsCsv);
-
-  const now = new Date();
-
-  /* -- users ------------------------------------------------------------- */
-
-  const managerHash = await bcrypt.hash(MANAGER_PASSWORD, BCRYPT_COST);
-  const users: UserDoc[] = [
-    {
-      _id: new ObjectId(),
-      staffCode: null,
-      name: "Clinic Manager",
-      email: MANAGER_EMAIL,
-      passwordHash: managerHash,
-      role: "manager",
-      profession: null,
-      bookings: [],
-      createdAt: now,
-    },
-  ];
-
-  // Hashed per user rather than once and reused, so no two accounts share a salt.
-  for (const record of staffResult.records) {
-    users.push({
-      _id: new ObjectId(),
-      staffCode: record.staffCode,
-      name: record.name,
-      email: record.email,
-      passwordHash: await bcrypt.hash(STAFF_PASSWORD, BCRYPT_COST),
-      role: "staff",
-      profession: record.profession,
-      bookings: [],
-      createdAt: now,
-    });
-  }
-
-  await db.collection<UserDoc>(COLLECTIONS.users).insertMany(users);
-
-  /* -- shifts ------------------------------------------------------------ */
-
-  const shifts: ShiftDoc[] = shiftsResult.records.map((record) => ({
+  // The manager is the one account not present in the spreadsheet.
+  await db.collection<UserDoc>(COLLECTIONS.users).insertOne({
     _id: new ObjectId(),
-    externalId: record.externalId,
-    startAt: record.startAt,
-    endAt: record.endAt,
-    requirements: record.requirements,
-    filled: { ...ZERO_COUNT },
-    claims: [],
-    seriesId: null,
-    occurrenceDate: null,
-    detachedFromSeries: false,
-    createdAt: now,
-    updatedAt: now,
-  }));
-
-  if (shifts.length) {
-    await db.collection<ShiftDoc>(COLLECTIONS.shifts).insertMany(shifts);
-  }
-
-  /* -- import reports ---------------------------------------------------- */
-
-  const toReport = (
-    result: ImportResult<unknown>,
-    filename: string,
-  ): ImportReportDoc => ({
-    _id: new ObjectId(),
-    createdAt: now,
-    source: "seed",
-    kind: result.kind,
-    filename,
-    summary: result.summary,
-    rows: result.rows,
-    notes: result.notes,
-    uploadedBy: null,
+    staffCode: null,
+    name: "Clinic Manager",
+    email: MANAGER_EMAIL,
+    passwordHash: await hashPassword(MANAGER_PASSWORD),
+    role: "manager",
+    profession: null,
+    bookings: [],
+    createdAt: new Date(),
   });
 
-  await db
-    .collection<ImportReportDoc>(COLLECTIONS.importReports)
-    .insertMany([
-      toReport(staffResult, "data/staff.csv"),
-      toReport(shiftsResult, "data/shifts.csv"),
-    ]);
+  const meta = { source: "seed" as const, uploadedBy: null };
 
-  /* -- summary ----------------------------------------------------------- */
-
-  const byProfession = staffResult.records.reduce<Record<string, number>>(
-    (acc, r) => ({ ...acc, [r.profession]: (acc[r.profession] ?? 0) + 1 }),
-    {},
+  const staffReport = await persistStaffImport(
+    importStaffCsv(readFileSync("data/staff.csv", "utf8")),
+    { ...meta, filename: "data/staff.csv" },
   );
+
+  const shiftsReport = await persistShiftsImport(
+    importShiftsCsv(readFileSync("data/shifts.csv", "utf8")),
+    { ...meta, filename: "data/shifts.csv" },
+  );
+
+  const staffCount = await db
+    .collection<UserDoc>(COLLECTIONS.users)
+    .countDocuments({ role: "staff" });
+  const byProfession = await db
+    .collection<UserDoc>(COLLECTIONS.users)
+    .aggregate<{ _id: string; n: number }>([
+      { $match: { role: "staff" } },
+      { $group: { _id: "$profession", n: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ])
+    .toArray();
+
+  const line = (label: string, s: typeof staffReport.summary) =>
+    `  ${label.padEnd(11)} ${s.total} rows -> ${s.accepted} accepted, ${s.merged} merged, ` +
+    `${s.conflict} conflict, ${s.rejected} rejected`;
 
   console.log("\nSeed complete.\n");
+  console.log(line("staff.csv", staffReport.summary));
+  console.log(line("shifts.csv", shiftsReport.summary));
   console.log(
-    `  staff.csv   ${staffResult.summary.total} rows -> ${staffResult.summary.accepted} accepted, ` +
-      `${staffResult.summary.merged} merged, ${staffResult.summary.conflict} conflict, ` +
-      `${staffResult.summary.rejected} rejected`,
+    `\n  ${staffCount + 1} logins (1 manager, ${staffCount} staff: ` +
+      byProfession.map((p) => `${p.n} ${p._id}s`).join(", ") +
+      ")",
   );
   console.log(
-    `  shifts.csv  ${shiftsResult.summary.total} rows -> ${shiftsResult.summary.accepted} accepted, ` +
-      `${shiftsResult.summary.merged} merged, ${shiftsResult.summary.conflict} conflict, ` +
-      `${shiftsResult.summary.rejected} rejected`,
+    `  ${await db.collection(COLLECTIONS.shifts).countDocuments()} shifts\n`,
   );
-  console.log(
-    `\n  ${users.length} logins (1 manager, ${staffResult.records.length} staff: ` +
-      `${byProfession.doctor ?? 0} doctors, ${byProfession.nurse ?? 0} nurses, ` +
-      `${byProfession.receptionist ?? 0} receptionists)`,
-  );
-  console.log(`  ${shifts.length} shifts\n`);
   console.log(`  Manager:  ${MANAGER_EMAIL} / ${MANAGER_PASSWORD}`);
-  const sample = staffResult.records[0];
-  if (sample) console.log(`  Staff:    ${sample.email} / ${STAFF_PASSWORD}`);
+  console.log(`  Staff:    any imported address / ${IMPORTED_STAFF_PASSWORD}`);
   console.log("\n  Full credentials are in the README.\n");
 }
 

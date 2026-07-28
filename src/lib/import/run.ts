@@ -20,6 +20,8 @@ import { parseRequirements } from "./requirements";
 /* -------------------------------------------------------------------------- */
 
 export interface ImportedStaff {
+  /** Line in the source file, so persistence can annotate the right report row. */
+  sourceLine: number;
   staffCode: string;
   name: string;
   email: string;
@@ -27,6 +29,8 @@ export interface ImportedStaff {
 }
 
 export interface ImportedShift {
+  /** Line in the source file, so persistence can annotate the right report row. */
+  sourceLine: number;
   externalId: string;
   startAt: Date;
   endAt: Date;
@@ -166,6 +170,7 @@ export function importStaffCsv(csvText: string): ImportResult<ImportedStaff> {
     }
 
     const record: ImportedStaff = {
+      sourceLine: lineNumber,
       staffCode,
       name: name.value,
       email: email.value,
@@ -291,6 +296,7 @@ export function importShiftsCsv(csvText: string): ImportResult<ImportedShift> {
     }
 
     const record: ImportedShift = {
+      sourceLine: lineNumber,
       externalId,
       startAt: interval.value.startAt,
       endAt: interval.value.endAt,
