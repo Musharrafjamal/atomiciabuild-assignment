@@ -16,7 +16,6 @@ import { MongoClient, type Db } from "mongodb";
  */
 
 declare global {
-  // eslint-disable-next-line no-var
   var __clinicMongo: {
     client: MongoClient | null;
     promise: Promise<MongoClient> | null;

@@ -1,26 +1,242 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * ============================================================================
+ * Design tokens
+ * ============================================================================
+ *
+ * The governing idea: the only saturated colour in this interface is
+ * information. Staffing status -- fully staffed, short, empty -- is the signal
+ * the coverage dashboard exists to convey, so the product itself is achromatic
+ * (warm paper, near-black ink, hairline rules) and green/amber/red are reserved
+ * for meaning. A branded accent colour would compete with the one thing a
+ * manager is scanning for.
+ *
+ * Surfaces are warm rather than pure white, so a wall of shift cards reads as
+ * printed roster rather than glare.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  /* Surfaces */
+  --paper: #faf9f5;
+  --paper-raised: #ffffff;
+  --paper-sunken: #f2f0e9;
+  --paper-inset: #eceadf;
+
+  /* Ink */
+  --ink: #171613;
+  --ink-muted: #57544c;
+  --ink-faint: #858175;
+
+  /* Structure */
+  --rule: #ded9cb;
+  --rule-strong: #c6c0ae;
+
+  /* Semantic -- staffing status. The only saturated colour in the product. */
+  --ok: #2f6f4f;
+  --ok-bg: #e4efe6;
+  --ok-edge: #8fbaa0;
+
+  --short: #9a6212;
+  --short-bg: #f8eeda;
+  --short-edge: #dfb877;
+
+  --empty: #a8342a;
+  --empty-bg: #f8e5e2;
+  --empty-edge: #dfa199;
+
+  --focus: #2c5aa0;
+
+  --radius: 3px;
+  --rhythm: 4px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --paper: #14130f;
+    --paper-raised: #1c1b16;
+    --paper-sunken: #100f0c;
+    --paper-inset: #24221b;
+
+    --ink: #f3f1e9;
+    --ink-muted: #a8a396;
+    --ink-faint: #7c776b;
+
+    --rule: #322f26;
+    --rule-strong: #464236;
+
+    --ok: #7fc39a;
+    --ok-bg: #16261d;
+    --ok-edge: #2f5c42;
+
+    --short: #e0ae5e;
+    --short-bg: #2a2113;
+    --short-edge: #5f4a20;
+
+    --empty: #e8897e;
+    --empty-bg: #2c1815;
+    --empty-edge: #653029;
+
+    --focus: #7aa5e8;
   }
 }
 
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-paper-sunken: var(--paper-sunken);
+  --color-paper-inset: var(--paper-inset);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-edge: var(--ok-edge);
+  --color-short: var(--short);
+  --color-short-bg: var(--short-bg);
+  --color-short-edge: var(--short-edge);
+  --color-empty: var(--empty);
+  --color-empty-bg: var(--empty-bg);
+  --color-empty-edge: var(--empty-edge);
+  --color-focus: var(--focus);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+}
+
+* {
+  border-color: var(--rule);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv05" 1, "ss03" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * A faint paper grain. Barely perceptible, but it stops large empty surfaces
+ * reading as flat digital white and ties the "printed roster" idea together.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  body::before {
+    opacity: 0.06;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Typographic primitives
+   --------------------------------------------------------------------------- */
+
+.display {
+  font-weight: 600;
+  letter-spacing: -0.033em;
+  line-height: 0.95;
+}
+
+/* Small caps labels used for column heads and field labels. */
+.label {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Times and counts. Tabular figures keep a column of shift times aligned. */
+.numeric {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "zero" 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Focus
+   --------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion
+   --------------------------------------------------------------------------- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes flash {
+  0% {
+    background-color: color-mix(in srgb, var(--focus) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.rise {
+  animation: rise 0.42s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* Marks a shift whose staffing changed while you were looking at it. */
+.flash {
+  animation: flash 1.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Scrollbars -- the week grid scrolls horizontally on tablet widths
+   --------------------------------------------------------------------------- */
+
+.scroll-x {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+.scroll-x::-webkit-scrollbar {
+  height: 8px;
+}
+.scroll-x::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: 999px;
+}
+.scroll-x::-webkit-scrollbar-track {
+  background: transparent;
 }

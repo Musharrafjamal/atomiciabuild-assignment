@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
-import type { Profession, Role } from "@/lib/db/schema";
+import type { Profession, Role } from "@/lib/domain";
 
 /**
  * Signing and verification of the session token.

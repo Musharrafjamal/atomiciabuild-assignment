@@ -10,7 +10,14 @@ import { TZDate } from "@date-fns/tz";
  * on string comparison and quietly break on every night shift; storing instants
  * makes it `aStart < bEnd && aEnd > bStart`.
  */
-export const CLINIC_TZ = process.env.CLINIC_TZ || "Europe/London";
+/**
+ * Read from the public variable first so client components resolve the same zone
+ * as the server. `process.env.CLINIC_TZ` is not inlined into the browser bundle,
+ * so relying on it alone would silently fall back to the default on the client
+ * and put a night shift on the wrong day for any clinic outside Europe/London.
+ */
+export const CLINIC_TZ =
+  process.env.NEXT_PUBLIC_CLINIC_TZ || process.env.CLINIC_TZ || "Europe/London";
 
 /** A wall-clock time of day, already validated. */
 export interface WallTime {
@@ -136,6 +143,30 @@ export function weekDayKeys(isoDate: string): string[] {
 /** Today's clinic-local date as `YYYY-MM-DD`. */
 export function clinicToday(): string {
   return clinicDayKey(new Date());
+}
+
+/**
+ * Human-readable date, always rendered in the clinic's timezone.
+ *
+ * Everything user-facing goes through here rather than calling Intl directly, so
+ * there is one place that knows which zone to format in.
+ */
+export function formatClinicDate(
+  value: Date | string,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  const instant =
+    typeof value === "string"
+      ? // A bare YYYY-MM-DD is a clinic-local calendar day, not a UTC instant.
+        /^\d{4}-\d{2}-\d{2}$/.test(value)
+        ? clinicInstant(value, { hour: 12, minute: 0 })
+        : new Date(value)
+      : value;
+
+  return new Intl.DateTimeFormat("en-GB", {
+    ...options,
+    timeZone: CLINIC_TZ,
+  }).format(instant);
 }
 
 /** Shift `isoDate` by whole clinic-local weeks; used by dashboard prev/next. */

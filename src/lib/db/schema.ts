@@ -1,42 +1,40 @@
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 
-/* -------------------------------------------------------------------------- */
-/* Enumerations                                                               */
-/* -------------------------------------------------------------------------- */
-
-export const PROFESSIONS = ["doctor", "nurse", "receptionist"] as const;
-export type Profession = (typeof PROFESSIONS)[number];
-export const professionSchema = z.enum(PROFESSIONS);
-
-export const ROLES = ["manager", "staff"] as const;
-export type Role = (typeof ROLES)[number];
-export const roleSchema = z.enum(ROLES);
-
-/** Plural, human-facing labels. `doctor` -> "doctors". */
-export const PROFESSION_LABEL: Record<Profession, { one: string; many: string }> = {
-  doctor: { one: "doctor", many: "doctors" },
-  nurse: { one: "nurse", many: "nurses" },
-  receptionist: { one: "receptionist", many: "receptionists" },
-};
-
-/* -------------------------------------------------------------------------- */
-/* Shared value objects                                                        */
-/* -------------------------------------------------------------------------- */
-
-/**
- * How many of each profession a shift needs, and how many it currently has.
- * Always fully populated (missing professions are 0) so the atomic `$expr`
- * capacity comparison in the claim engine never has to handle a null field.
+/*
+ * The clinic vocabulary lives in src/lib/domain.ts, free of any driver import,
+ * so client components can share it without pulling mongodb into the browser
+ * bundle. It is re-exported here so server code has one obvious place to import
+ * from.
  */
-export const staffCountSchema = z.object({
-  doctor: z.number().int().min(0),
-  nurse: z.number().int().min(0),
-  receptionist: z.number().int().min(0),
-});
-export type StaffCount = z.infer<typeof staffCountSchema>;
+export {
+  PROFESSIONS,
+  professionSchema,
+  ROLES,
+  roleSchema,
+  PROFESSION_LABEL,
+  staffCountSchema,
+  ZERO_COUNT,
+  IMPORT_OUTCOMES,
+  IMPORT_KINDS,
+  COLLECTIONS,
+} from "@/lib/domain";
+export type {
+  Profession,
+  Role,
+  StaffCount,
+  ImportOutcome,
+  ImportKind,
+} from "@/lib/domain";
 
-export const ZERO_COUNT: StaffCount = { doctor: 0, nurse: 0, receptionist: 0 };
+import {
+  professionSchema,
+  roleSchema,
+  staffCountSchema,
+  IMPORT_KINDS,
+  IMPORT_OUTCOMES,
+} from "@/lib/domain";
+import type { Profession, Role } from "@/lib/domain";
 
 const objectId = z.custom<ObjectId>((v) => v instanceof ObjectId, {
   message: "expected an ObjectId",
@@ -136,17 +134,6 @@ export type ShiftDoc = z.infer<typeof shiftSchema>;
 /* importReports                                                               */
 /* -------------------------------------------------------------------------- */
 
-export const IMPORT_OUTCOMES = [
-  "accepted",
-  "merged",
-  "conflict",
-  "rejected",
-] as const;
-export type ImportOutcome = (typeof IMPORT_OUTCOMES)[number];
-
-export const IMPORT_KINDS = ["staff", "shifts"] as const;
-export type ImportKind = (typeof IMPORT_KINDS)[number];
-
 /**
  * One row's fate. `raw` preserves the original line verbatim so the report can
  * show the reviewer exactly what was in the spreadsheet, which is what the brief
@@ -211,14 +198,3 @@ export const shiftSeriesSchema = z.object({
   updatedAt: z.date(),
 });
 export type ShiftSeriesDoc = z.infer<typeof shiftSeriesSchema>;
-
-/* -------------------------------------------------------------------------- */
-/* Collection names                                                            */
-/* -------------------------------------------------------------------------- */
-
-export const COLLECTIONS = {
-  users: "users",
-  shifts: "shifts",
-  importReports: "importReports",
-  shiftSeries: "shiftSeries",
-} as const;

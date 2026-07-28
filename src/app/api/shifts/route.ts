@@ -2,7 +2,10 @@ import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { handler, ok, readJson } from "@/lib/api/respond";
 import { toShiftView } from "@/lib/api/views";
-import { findShiftsForWeek } from "@/lib/api/shift-queries";
+import {
+  findNearestWeekWithShifts,
+  findShiftsForWeek,
+} from "@/lib/api/shift-queries";
 import { requireManager, requireUser } from "@/lib/auth/guards";
 import { createShift } from "@/lib/rules/shifts";
 import { clinicToday, weekDayKeys } from "@/lib/time";
@@ -27,6 +30,8 @@ export const GET = handler(async (request: Request) => {
     week,
     days: weekDayKeys(week),
     shifts: shifts.map((s) => toShiftView(s, viewerId)),
+    // Only looked up when the week is empty, so the common path stays one query.
+    nearestWeek: shifts.length === 0 ? await findNearestWeekWithShifts(week) : null,
   });
 });
 
