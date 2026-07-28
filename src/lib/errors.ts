@@ -20,8 +20,7 @@ export type ErrorCode =
   | "ALREADY_CLAIMED"
   | "NOT_CLAIMED"
   | "SHIFT_CHANGED"
-  | "WRONG_PROFESSION"
-  | "SHIFT_IN_PAST";
+  | "WRONG_PROFESSION";
 
 export class ApiError extends Error {
   constructor(

@@ -177,7 +177,71 @@ Web Crypto and works there, whereas bcrypt does not.
 
 ## 4. Keeping shift availability correct under concurrent users
 
-_§5 — the core of the assignment._
+The brief asks that "a shift's availability should stay accurate no matter how many
+people are acting on it at once". Two different mechanisms deliver that, and they
+are not the same thing — only one of them is a real design decision.
+
+### Capacity is protected by same-document contention
+
+Every claimant for a shift writes that shift's document. MongoDB transactions are
+snapshot-isolated with first-committer-wins detection, so two concurrent writes to
+the same document raise a `WriteConflict`; `withTransaction` retries the loser,
+which re-reads and finds the slot gone. Overbooking is impossible here even without
+a filter predicate.
+
+The capacity guard —
+`$expr: { $lt: [filled.<profession>, requirements.<profession>] }` — is still worth
+having. It rejects in a single round trip instead of aborting and retrying under
+contention, and it makes the rule a property of the write itself rather than a
+consequence of the retry loop.
+
+### Overlap is protected by writing to the claimant's own document
+
+This is the actual decision, and it is the one worth explaining.
+
+The natural implementation of the overlap rule is to query the shifts collection
+for that person's other claims, and then write only the shift. **That is wrong under
+concurrency.** Two claims by the same person, on two different overlapping shifts,
+touch disjoint documents. Nothing collides, both transactions commit, and the person
+is double-booked. This is textbook write skew: snapshot isolation permits it, and no
+amount of retrying will detect it, because there is no conflict to detect.
+
+So a claim also pushes onto the claimant's own `bookings` array, under a
+`$not: { $elemMatch: <overlapping interval> }` predicate. That one array is the
+contention point that forces two concurrent overlapping claims to collide.
+
+### This was verified, not assumed
+
+I deliberately replaced the user-document write with the shifts-collection query
+described above and re-ran the suite. The write-skew tests failed exactly as
+predicted — one nurse ended up holding both overlapping shifts, and five of five in
+the many-shift case. Restoring the write made them pass again.
+
+Worth recording that the first sabotage I tried — removing only the filter
+predicates while keeping both writes — *still passed*, because same-document
+contention plus the driver's retry already covers the capacity case. That is what
+prompted separating the two mechanisms above rather than claiming the predicates do
+all the work.
+
+### Consequences elsewhere
+
+- **One code path.** Staff self-claim, manager assignment, and release all call the
+  same function, differing only in the permission check and an `assignedBy` field.
+  "These rules must also hold when a manager assigns someone" is therefore true by
+  construction, not by remembering to duplicate the checks.
+- **Failing the second write rolls back the first.** If the booking is reserved and
+  the shift is then full, the transaction aborts and the reservation disappears —
+  nobody is left holding time for a shift they did not get. There is a test.
+- **Diagnostic reads before enforcement.** The guarded updates alone would only say
+  "no". A read beforehand determines *which* rule was hit, so the user is told "this
+  overlaps a shift already claimed on 2026-08-17 22:00-06:00" rather than a generic
+  refusal. Those reads enforce nothing; if one races, the guard below still rejects.
+- **A requirement of zero gets its own message.** Technically `filled >= required` is
+  already true at zero, but "this shift does not need any doctors" is a more useful
+  sentence than "this shift already has enough doctors".
+- **Release decrements the profession recorded on the claim,** not the claimant's
+  current profession, so the counter stays balanced even if their profession changed
+  after they claimed.
 
 ## 5. Editing a shift that already has claims
 
