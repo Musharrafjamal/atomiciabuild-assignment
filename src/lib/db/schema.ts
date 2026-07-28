@@ -178,6 +178,12 @@ export const importReportSchema = z.object({
     rejected: z.number().int().min(0),
   }),
   rows: z.array(importRowSchema),
+  /**
+   * File-level observations, chiefly how ambiguous date formats were resolved and
+   * which row proved each conclusion. Shown above the per-row table so a reviewer
+   * can check the interpretation rather than take it on trust.
+   */
+  notes: z.array(z.string()),
   /** Who ran it; null for the seed. */
   uploadedBy: objectId.nullable(),
 });

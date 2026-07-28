@@ -55,7 +55,81 @@ npm run dev
 
 ## Seeded logins
 
-_Added in §3, once the importer determines the final staff list._
+The staff roster is produced by importing `data/staff.csv` — these accounts are
+whatever the importer accepted, not a hand-written list.
+
+**Manager** — `manager@clinic.test` / `manager1234`
+
+**All staff share the password `staff1234`.** Sign in with any address below.
+
+<details open>
+<summary><strong>Doctors</strong> (8)</summary>
+
+| Name | Email |
+|---|---|
+| Chloe Hussain | `chloe.hussain@clinicmail.test` |
+| Dev Bell | `dev.bell@clinicmail.test` |
+| Hiro Nolan | `hiro.nolan@clinicmail.test` |
+| Lucia Volkov | `lucia.volkov@clinicmail.test` |
+| Marcus Whitfield | `marcus.whitfield@clinicmail.test` |
+| Omar Patel | `omar.patel@clinicmail.test` |
+| Priya Weber | `priya.weber@clinicmail.test` |
+| Rosa Patel | `rosa.patel@clinicmail.test` |
+</details>
+
+<details>
+<summary><strong>Nurses</strong> (16)</summary>
+
+| Name | Email |
+|---|---|
+| Aisha Sharma | `aisha.sharma@clinicmail.test` |
+| Aisha Weber | `aisha.weber@clinicmail.test` |
+| Anya Haddad | `anya.haddad@clinicmail.test` |
+| Ben Ali | `ben.ali@clinicmail.test` |
+| Fatima Petrova | `fatima.petrova@clinicmail.test` |
+| Felix Volkov | `felix.volkov@clinicmail.test` |
+| Ivy Bell | `ivy.bell@clinicmail.test` |
+| Noah Ali | `noah.ali@clinicmail.test` |
+| Omar Haddad | `omar.haddad@clinicmail.test` |
+| Priya Lind | `priya.lind@clinicmail.test` |
+| Priya Patel | `priya.patel@clinicmail.test` |
+| Rosa Weber | `rosa.weber@clinicmail.test` |
+| Tara Rahman | `tara.rahman@clinicmail.test` |
+| Tara Rossi | `tara.rossi@clinicmail.test` |
+| Yusuf Patel | `yusuf.patel@clinicmail.test` |
+| Zainab Volkov | `zainab.volkov@clinicmail.test` |
+</details>
+
+<details>
+<summary><strong>Receptionists</strong> (10)</summary>
+
+| Name | Email |
+|---|---|
+| Anya Nakamura | `anya.nakamura@clinicmail.test` |
+| Ben Marchand | `ben.marchand@clinicmail.test` |
+| Fatima Marchand | `fatima.marchand@clinicmail.test` |
+| Hiro Iyer | `hiro.iyer@clinicmail.test` |
+| Hiro Petrova | `hiro.petrova@clinicmail.test` |
+| Karan Ali | `karan.ali@clinicmail.test` |
+| Lucia Nakamura | `lucia.nakamura@clinicmail.test` |
+| Marcus Kapoor | `marcus.kapoor@clinicmail.test` |
+| Priya Mehta | `priya.mehta@clinicmail.test` |
+| Zainab Okafor | `zainab.okafor@clinicmail.test` |
+</details>
+
+> Some names from the spreadsheet are deliberately absent — Casey Morgan (listed as
+> a janitor), Robin Vale (no email), and the row with no name were all rejected by
+> the importer. The **Import** page in the app explains each one.
+
+### What the seed imports
+
+| File | Rows | Accepted | Merged | Conflict | Rejected |
+|---|---|---|---|---|---|
+| `data/staff.csv` | 41 | 34 | 2 | 2 | 3 |
+| `data/shifts.csv` | 117 | 110 | 1 | 0 | 6 |
+
+Every non-accepted row is explained on the Import Report page, with the original
+row, what was wrong with it, and what was done about it.
 
 ---
 
