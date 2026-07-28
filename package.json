@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
+    "@next/swc-win32-x64-msvc": "^16.2.12",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

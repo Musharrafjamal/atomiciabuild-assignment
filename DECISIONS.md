@@ -132,7 +132,48 @@ report is enough to fix it.
 
 ## 3. Authentication
 
-_§4_
+### A hand-rolled session rather than Auth.js
+
+Sessions are a `jose`-signed JWT in an httpOnly cookie, with `bcryptjs` for password
+hashing — about 120 lines in total.
+
+Auth.js would have been the conventional pick, but its Credentials provider plus
+middleware integration is a well-known source of configuration friction, and on a
+four-day budget the risk of losing half a day to it outweighed the benefit. What
+this app actually needs from auth is small and completely specified: verify a
+password, issue a signed token, read it back, and know a role. Owning that
+outright also means every line is explainable, which the brief explicitly asks for.
+
+`bcryptjs` over the native `bcrypt` binding so there is no compilation step in the
+Docker image and the same code runs unchanged on Vercel.
+
+### The proxy is not the security boundary
+
+`src/proxy.ts` redirects signed-out visitors to the login page and keeps staff off
+manager screens. That is a convenience, not a control — Next's own documentation
+states Proxy should not be used as an authorisation solution.
+
+The real boundary is `requireUser()` / `requireManager()` in `src/lib/auth/guards.ts`,
+which every mutating route calls inside the request that does the work. Deleting
+`proxy.ts` entirely would cost polish, not safety.
+
+Password hashing deliberately does **not** happen at the proxy layer: `jose` runs on
+Web Crypto and works there, whereas bcrypt does not.
+
+### Details worth noting
+
+- **No user enumeration.** "No such account" and "wrong password" return an identical
+  401, and the bcrypt comparison still runs against a dummy hash when the account is
+  missing so the two paths take comparable time.
+- **Algorithm pinning.** `jwtVerify` is restricted to `HS256`, so a token claiming
+  `alg: none` is rejected. There is a test for this, and one that forges a payload
+  with `role` escalated to `manager` while keeping the original signature.
+- **The token is not authority for mutations.** It carries `role` and `profession` so
+  the UI and the proxy redirect need no database round-trip, but the claim engine
+  re-reads the user document inside its transaction. A stale or tampered token
+  therefore cannot widen what a request is permitted to do.
+- **`secure` is conditional on `NODE_ENV`,** because Vercel terminates TLS but local
+  development is plain HTTP.
 
 ## 4. Keeping shift availability correct under concurrent users
 
