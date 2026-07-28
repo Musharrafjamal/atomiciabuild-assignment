@@ -112,6 +112,8 @@ export type Claim = z.infer<typeof claimSchema>;
 
 export const shiftSchema = z.object({
   _id: objectId,
+  /** `shift_id` from the CSV, kept so an imported row can be traced back. */
+  externalId: z.string().nullable(),
   /** UTC instants. See src/lib/time.ts for why these are not wall-clock strings. */
   startAt: z.date(),
   endAt: z.date(),

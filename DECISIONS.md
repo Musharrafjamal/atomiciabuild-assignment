@@ -52,7 +52,83 @@ providing schema validation at both the API boundary and the CSV boundary.
 
 ## 2. Reading the dirty CSVs
 
-_§2_
+The importer is a pure module (`src/lib/import/`) with no database or framework
+imports. The seed and the manager's UI upload both call the same functions, which
+is why an uploaded file produces a report identical in form to the seeded one.
+
+Every row produces `{ rowNumber, raw, outcome, reason, action }`. That array **is**
+the import report — there is no second code path that summarises what happened, so
+the report cannot drift from what was actually done.
+
+Line numbers count the header as line 1, so they match what the reviewer sees when
+opening the CSV in a spreadsheet. Blank lines are filtered *after* parsing rather
+than skipped during it, so the numbering stays true.
+
+### Date formats are inferred from the file, not assumed
+
+The export mixes three date formats, and `05/08/2026` is ambiguous in isolation —
+5 August or 8 May?
+
+Rather than hardcode a convention, the importer reads all the dates first and
+derives one: if any row has a first component above 12, the first component must be
+the day, and that convention then applies to the whole file. In the supplied data
+`29/08/2026` proves slash dates are day-first, and `08-13-2026` proves dash dates
+are month-first. Both conclusions are printed at the top of the import report with
+the row that proved them, so the interpretation can be checked rather than trusted.
+
+If a file never disambiguates, day-first is assumed and the report says so
+explicitly. If a file contradicts itself, that is reported too.
+
+**Independent confirmation this is right:** the clinic rosters uniform 8-hour
+shifts, and all 110 accepted shifts come out at exactly 8 hours. A wrong day/month
+reading or a broken midnight rule would produce 16-, 18- or 26-hour outliers. There
+is a test asserting the set of distinct durations is exactly `[8]`.
+
+### What counts as an impossible time
+
+- **End at or before start** is read as crossing midnight, which is what makes
+  `22:00 → 06:00` and `16:00 → 00:00` come out as 8-hour shifts rather than
+  negative ones.
+- **Identical start and end** (`12:00 → 12:00`, shift 5112) is reported as a
+  zero-duration shift. Under the midnight rule it would technically be a 24-hour
+  shift, but that diagnosis would be useless to whoever has to fix the row.
+- **Anything over 16 hours** is rejected as a data-entry error. Every well-formed
+  shift in the file is 8 hours; 16 permits a legitimate double shift while still
+  catching `15:00 → 09:00` (18h, transposed) and `08:00 → 10:00+1` (26h).
+
+### Rejected rather than guessed
+
+Two places where a cleverer importer would have been a worse one:
+
+- **`two nurses and a doctor`** (shift 5113) is rejected, not parsed. Handling
+  English number words would work for this row and then quietly mis-staff a shift
+  the first time someone writes "a couple of nurses". Rostering the wrong number of
+  clinical staff is worse than refusing the row and naming it on the report.
+- **`Janitor`** (staff 997) is rejected rather than fuzzy-matched to a clinical
+  role. Role mapping is exact-match against a synonym table for the same reason.
+
+The one repair that *is* applied automatically is `(at)` → `@` in email addresses,
+because `(at)` cannot legally appear in an address, so the substitution is
+unambiguous. The report still says the address was repaired.
+
+### Merge, conflict and reject are distinguished
+
+- **merged** — a later row is byte-identical to an earlier one after normalisation
+  (staff 103 and 110, shift 5020). Imported once, both lines shown.
+- **conflict** — a later row reuses an identifier with *different* data. The first
+  occurrence wins and the report names the line that was kept. This covers the two
+  email collisions: staff 105 reuses the address of 999, and "J. Placeholder" (998)
+  reuses Hiro Iyer's.
+- **rejected** — the row is unusable on its own terms (bad date, no email, no name,
+  unparseable requirements).
+
+Keep-first is deliberate over anything cleverer. The IDs in the 995–999 range are
+obviously junk in *this* file, but a rule like "prefer lower ids" would be
+overfitting — the same importer has to handle an arbitrary CSV uploaded through the
+UI. Predictable behaviour plus a report that names the clash lets a human resolve it.
+
+A row missing several things reports all of them at once, so one pass through the
+report is enough to fix it.
 
 ## 3. Authentication
 

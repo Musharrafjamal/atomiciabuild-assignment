@@ -31,10 +31,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # directConnection=true is required against a single-node replica set: without
-      # it the driver performs SRV/topology discovery and reports the host as
-      # unreachable under the container's own hostname.
-      MONGODB_URI: mongodb://mongo:27017/clinic?replicaSet=rs0&directConnection=true
+      # directConnection=true, and deliberately NO replicaSet= parameter: the
+      # atlas-local image names its replica set after the container ID rather than
+      # a fixed "rs0", so pinning a name makes the driver reject the server as a
+      # setName mismatch. directConnection skips topology discovery and talks to
+      # the node directly, which still supports transactions and change streams
+      # because the node itself is a replica set primary.
+      MONGODB_URI: mongodb://mongo:27017/clinic?directConnection=true
       AUTH_SECRET: dev-only-secret-change-in-production-0123456789abcdef
       CLINIC_TZ: Europe/London
       SEED_ON_BOOT: "true"
