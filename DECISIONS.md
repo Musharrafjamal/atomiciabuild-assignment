@@ -245,7 +245,70 @@ all the work.
 
 ## 5. Editing a shift that already has claims
 
-_§6 — the decision the brief explicitly asks to be designed and documented._
+> The brief leaves this open: *"Editing a shift that already has claims is up to you
+> to design. Decide what happens to the people who claimed it, and document your
+> decision."*
+
+**The policy: re-validate and disclose. Never silently drop, never block the edit.**
+
+Three options were on the table:
+
+1. **Refuse to edit a claimed shift.** Safe and useless — a manager cannot fix a
+   typo on the one shift that matters most.
+2. **Edit freely and silently drop whoever no longer fits.** Convenient, and the
+   worst option: someone finds out they are off a shift by noticing it missing.
+3. **Preview, confirm, disclose.** What is implemented.
+
+### How it works
+
+Editing is two steps. `previewShiftEdit` is a dry run that answers "who would this
+affect, and why", naming each person and the reason:
+
+> *Ben Ali would now clash with their shift on 2026-08-17 22:00-16:00.*
+> *Ivy Bell would be released because the shift now needs only 1 nurse.*
+
+If the manager confirms, `applyShiftEdit` performs the edit and the releases in a
+single transaction, so the shift never exists in a state where its claims contradict
+its requirements.
+
+Both rules are re-checked, not just the one that obviously changed:
+
+- **Times moved** → every claimant is re-tested against their *other* commitments.
+- **Requirements lowered** → the excess is released.
+
+Overlap is resolved first and capacity is then measured against whoever survives, so
+nobody is reported twice for one edit.
+
+### Who gets released when capacity shrinks
+
+**Most recent claim first.** Someone who claimed the shift a week ago has planned
+around it; someone who claimed it a minute ago has not. Seniority of claim is the
+fairest tiebreak available without inventing a priority system the brief did not ask
+for.
+
+### Guarding against a stale preview
+
+The preview returns the shift's `updatedAt`, and the confirming request must send it
+back. If anyone claims or edits the shift in between, the confirm is refused with
+`SHIFT_CHANGED` and the manager sees the new situation. Without this, a manager
+could be shown "this affects nobody", have someone claim the last slot while they
+read it, and then release that person without ever being told.
+
+### The part that would have been invisible
+
+Claims are denormalised onto each claimant as a `bookings` entry, and that array is
+what the overlap rule reads. So when a shift's times change, **the surviving
+claimants' bookings have to move with it**. Miss that, and the overlap rule keeps
+evaluating those people against the shift's old hours forever — they would be
+blocked from a slot that is now free, and bookable onto one that genuinely clashes.
+
+Nothing surfaces this in normal use; the shift looks right and the counts add up.
+There is a test that moves a claimed shift from 08:00-16:00 to 18:00-22:00 and then
+proves the nurse can claim the vacated morning and *cannot* claim a clashing
+evening. Deleting the booking-move code makes it fail.
+
+Deletion has the same hazard and the same fix: removing a shift pulls its bookings
+from everyone who held it.
 
 ## 6. Recurring shifts
 
