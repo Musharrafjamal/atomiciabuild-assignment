@@ -11,6 +11,7 @@ import {
   persistShiftsImport,
   persistStaffImport,
 } from "@/lib/import/persist";
+import { seedClaims } from "./seed-claims";
 
 config({ path: ".env.local", quiet: true });
 
@@ -77,6 +78,10 @@ async function main() {
     { ...meta, filename: "data/shifts.csv" },
   );
 
+  // Put people on shifts through the real claim engine, so the dashboard shows
+  // all three coverage states rather than a wall of empty ones.
+  const { claims } = await seedClaims(db);
+
   const staffCount = await db
     .collection<UserDoc>(COLLECTIONS.users)
     .countDocuments({ role: "staff" });
@@ -102,7 +107,8 @@ async function main() {
       ")",
   );
   console.log(
-    `  ${await db.collection(COLLECTIONS.shifts).countDocuments()} shifts\n`,
+    `  ${await db.collection(COLLECTIONS.shifts).countDocuments()} shifts, ` +
+      `${claims} claims placed through the claim engine\n`,
   );
   console.log(`  Manager:  ${MANAGER_EMAIL} / ${MANAGER_PASSWORD}`);
   console.log(`  Staff:    any imported address / ${IMPORTED_STAFF_PASSWORD}`);

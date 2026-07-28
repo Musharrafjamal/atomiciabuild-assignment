@@ -8,7 +8,7 @@ import { useWeekParam } from "@/lib/client/use-week";
 import { clinicToday, formatClinicDate } from "@/lib/time";
 import { Button, Empty, cx } from "@/components/ui";
 import { WeekNav } from "@/components/week-nav";
-import { MissingChips, StatusBar } from "@/components/coverage";
+import { MissingChips, StatusBar, shortName } from "@/components/coverage";
 import { ShiftDetail } from "@/components/shift-detail";
 import { ShiftEditor } from "@/components/shift-editor";
 
@@ -354,7 +354,7 @@ function ShiftCard({
 
       {shift.claims.length > 0 && (
         <div className="mt-1.5 truncate text-[11px] text-ink-faint">
-          {shift.claims.map((c) => c.name.split(" ")[0]).join(", ")}
+          {shift.claims.map((c) => shortName(c.name)).join(", ")}
         </div>
       )}
     </button>

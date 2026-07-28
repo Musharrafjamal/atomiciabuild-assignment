@@ -131,6 +131,16 @@ whatever the importer accepted, not a hand-written list.
 Every non-accepted row is explained on the Import Report page, with the original
 row, what was wrong with it, and what was done about it.
 
+The seed then places **157 claims** across the 110 shifts, leaving 28 fully
+staffed, 46 short, and 36 with nobody on them — so the coverage dashboard shows
+all three states rather than a wall of empty ones.
+
+Those claims go through the real claim engine rather than being inserted
+directly, so the fill counters, the denormalised bookings and the overlap rule
+are all consistent, and the seeded state is one the application could genuinely
+have reached. The placement is deterministic: the same CSVs always produce the
+same rota.
+
 ---
 
 ## Tests

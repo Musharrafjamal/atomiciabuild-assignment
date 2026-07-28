@@ -7,7 +7,7 @@ import { ApiFailure, api, refreshWeek, useWeek } from "@/lib/client/api";
 import { clinicToday, formatClinicDate } from "@/lib/time";
 import { Button, Empty, cx } from "@/components/ui";
 import { WeekNav } from "@/components/week-nav";
-import { FillTally, MissingChips, StatusBar } from "@/components/coverage";
+import { FillTally, MissingChips, StatusBar, shortName } from "@/components/coverage";
 
 /**
  * The staff view: this week's shifts, grouped by day, with claim and release.
@@ -229,7 +229,7 @@ function ShiftRow({
             <FillTally shift={shift} />
             {others.length > 0 && (
               <span className="truncate text-xs text-ink-faint">
-                with {others.map((c) => c.name.split(" ")[0]).join(", ")}
+                with {others.map((c) => shortName(c.name)).join(", ")}
               </span>
             )}
           </div>

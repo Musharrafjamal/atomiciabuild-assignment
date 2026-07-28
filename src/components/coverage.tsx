@@ -38,6 +38,19 @@ export function statusStyle(status: ShiftView["status"]) {
   return STATUS_STYLES[status];
 }
 
+/**
+ * "Rosa Weber" -> "Rosa W."
+ *
+ * First names alone are not enough on this roster: it has two Rosas, three
+ * Priyas and three Hiros, so a shift card reading "Rosa, Tara, Rosa" tells a
+ * manager nothing. The surname initial disambiguates for barely any more width.
+ */
+export function shortName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length < 2) return parts[0] ?? fullName;
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
 /** e.g. "2 nurses", "1 doctor" — pluralised against the count. */
 export function roleCount(profession: keyof typeof PROFESSION_LABEL, n: number) {
   const label = PROFESSION_LABEL[profession];
