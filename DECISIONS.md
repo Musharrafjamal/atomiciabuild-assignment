@@ -411,4 +411,46 @@ numeric change is easy to miss entirely.
 
 ## What I would do differently with more time
 
-_§16_
+**The `bookings` array on the user document grows without bound.**
+
+Every claim appends an entry, and nothing ever removes one except releasing that
+claim. It is deliberate — that array is the contention point that makes the
+overlap rule correct under concurrent claims (§4), and I would make the same
+choice again for that reason. But it is also the first thing that would need
+attention in production.
+
+Two problems arrive with time rather than with load:
+
+- A nurse working five shifts a week accumulates roughly 250 entries a year. The
+  overlap predicate does an `$elemMatch` scan over the whole array on every
+  claim, so the check gets steadily slower for exactly the people who use the
+  system most.
+- MongoDB documents are capped at 16MB. That ceiling is years away at this size,
+  but "years away" is not "never", and the failure mode when it arrives is a
+  clinician being unable to claim a shift.
+
+With more time I would keep the array as the concurrency primitive but **bound
+it to the future** — prune entries for shifts that have already ended, as part of
+the same transaction that claims a new one, or on a scheduled job. Overlap only
+ever needs to consider shifts that have not finished, so nothing is lost. That
+keeps the property the design depends on while removing the growth.
+
+The alternative — moving bookings to their own collection — is tempting for
+tidiness but would *lose* the guarantee: two claims by the same person would then
+write two different documents and stop colliding, which is precisely the write
+skew §4 exists to prevent. It would need a different mechanism (a unique index on
+a discretised time bucket, say), and I would not want to swap a proven approach
+for an unproven one without time to test it as thoroughly.
+
+### Two smaller ones
+
+- **Nobody is notified when a manager releases their claim.** The confirmation
+  dialog is honest about this ("They are not notified automatically"), but a
+  clinician finding out by noticing a shift missing from their list is poor. An
+  outbox table written in the same transaction as the release would be the
+  natural fix.
+- **Import is additive only.** Re-uploading a corrected spreadsheet skips rows
+  that already exist rather than updating them, and says so on the report. A
+  proper update mode should exist — but it needs the same preview-and-disclose
+  treatment that shift editing has (§5), because changing a shift people have
+  claimed is exactly as consequential through an import as through the UI.

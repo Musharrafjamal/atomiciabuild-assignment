@@ -189,8 +189,54 @@ npx tsx scripts/live-check.ts         # live updates across two real sessions
 
 ---
 
+## Features
+
+**Staff** see their week, claim and release shifts. A refusal explains itself
+where it happened — *"This overlaps a shift already claimed on 2026-08-17
+22:00–06:00"* — rather than as a generic failure.
+
+**Managers** get a coverage board for the week showing every shift, whether it is
+fully staffed, short, or empty, and **which roles are still missing**. They can
+create, edit and delete shifts, assign staff directly, and import CSVs.
+
+Both stretch goals are implemented:
+
+- **Recurring shifts** — "every Mon/Wed 08:00–16:00 until 30 September". A single
+  occurrence can be edited or deleted without disturbing the rest of the series.
+- **Live updates** — when a shift fills up, everyone else viewing it sees the
+  change without refreshing, typically within 150ms. A badge shows whether the
+  board is live or has fallen back to polling.
+
+### Notes on behaviour worth knowing
+
+- **Editing a shift somebody has claimed** shows the manager exactly who would be
+  affected and why, and only acts on confirmation. Full reasoning in
+  [`DECISIONS.md §5`](./DECISIONS.md).
+- **Times are stored as UTC instants** derived from the clinic's timezone
+  (`CLINIC_TZ`), so overnight shifts like `22:00 → 06:00` behave correctly and
+  overlap detection is exact.
+- **Back-to-back shifts are allowed.** `08:00–16:00` followed by `16:00–00:00`
+  share an endpoint but do not overlap.
+
+---
+
 ## Documentation
 
-- [`DECISIONS.md`](./DECISIONS.md) — design decisions and trade-offs, including what
-  happens to existing claims when a shift is edited.
+- [`DECISIONS.md`](./DECISIONS.md) — the design decisions and their trade-offs:
+  how the concurrency guarantees actually work, what happens to existing claims
+  when a shift is edited, how the dirty CSVs were interpreted, and what I would
+  do differently with more time.
 - [`PROJECT_BRIEF.md`](./PROJECT_BRIEF.md) — the original assignment.
+
+## Project layout
+
+```
+src/lib/import/     CSV pipeline — pure, no database, shared by seed and upload
+src/lib/rules/      claim engine, shift editing, recurring series
+src/lib/db/         driver, schemas, indexes
+src/lib/time.ts     clinic-timezone helpers; the only place that knows the zone
+src/app/api/        route handlers
+src/app/(app)/      authenticated screens
+tests/integration/  concurrency and rules, against a real replica set
+tests/e2e/          full stack in a browser
+```
