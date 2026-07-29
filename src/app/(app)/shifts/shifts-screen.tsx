@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useWeekParam } from "@/lib/client/use-week";
 import type { ShiftView } from "@/lib/api/views";
 import { ApiFailure, api, refreshWeek, useWeek } from "@/lib/client/api";
+import { useLiveShifts } from "@/lib/client/use-live-shifts";
+import { LiveBadge } from "@/components/live-badge";
 import { clinicToday, formatClinicDate } from "@/lib/time";
 import { Button, Empty, cx } from "@/components/ui";
 import { WeekNav } from "@/components/week-nav";
@@ -36,6 +38,13 @@ export function ShiftsScreen({
     goToWeek(next);
   };
   const { data, isLoading } = useWeek(week);
+
+  const live = useLiveShifts(() => refreshWeek(week));
+  useEffect(() => {
+    if (live !== "polling") return;
+    const id = setInterval(() => refreshWeek(week), 8000);
+    return () => clearInterval(id);
+  }, [live, week]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [onlyMine, setOnlyMine] = useState(false);
@@ -84,6 +93,7 @@ export function ShiftsScreen({
   return (
     <div className="flex flex-col gap-7">
       <WeekNav week={week} onChange={setWeek}>
+        <LiveBadge status={live} />
         <button
           type="button"
           onClick={() => setOnlyMine((v) => !v)}

@@ -359,7 +359,53 @@ exactly that.
 
 ## 7. Live updates
 
-_§14_
+### The database is the event source
+
+`/api/stream` opens a MongoDB **change stream** on the `shifts` collection. The
+database already knows when a shift changed, so no write path has to remember to
+publish an event — a claim made through the API, by the seed, or by hand in
+`mongosh` all surface identically. There is no way to add a new write and forget
+to make it live.
+
+### Server-sent events rather than WebSockets
+
+The data travels one way, so a socket buys nothing. SSE is plain HTTP: it works
+through the serverless request/response model, needs no separate server, and
+`EventSource` reconnects on its own.
+
+That last point does real work here. A serverless function cannot run
+indefinitely, so the endpoint **closes its own stream at 240s**, comfortably
+inside the platform's limit, and the browser silently reopens. Ending
+deliberately is better than being truncated. Every reconnect sends a `ready`
+event which the client treats as a cue to revalidate, so nothing that happened
+during the gap is missed.
+
+### The event carries an identity, not a payload
+
+A change event says *which* shift changed, not what it now looks like. The client
+refetches the week it is displaying. That means there is no partial-update merge
+logic that could drift from the real state, at the cost of one small request per
+change — a trade worth making for a board a manager makes staffing decisions from.
+
+### It degrades rather than failing
+
+If the deployment cannot support change streams — a standalone `mongod` rather
+than a replica set — the endpoint says so and closes, and the client falls back
+to polling every 8 seconds. Repeated connection failures do the same after four
+attempts. A badge in the corner shows which mode is active, because someone
+deciding whether a shift still needs cover should be able to tell whether they
+are looking at live data or a snapshot.
+
+`NEXT_PUBLIC_DISABLE_LIVE=true` forces polling.
+
+### Verified, not assumed
+
+`scripts/live-check.ts` drives two independent browser contexts with separate
+sessions. The manager watches the coverage board and is never touched again; a
+nurse in the other session claims a shift. The board updates in **under 150ms**
+with no reload or navigation — "3 nurses short" becomes "2 nurses short · Ivy B."
+— and the changed card is briefly highlighted, because in a dense week a silent
+numeric change is easy to miss entirely.
 
 ---
 

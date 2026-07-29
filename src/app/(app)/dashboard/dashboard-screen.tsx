@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ShiftView } from "@/lib/api/views";
 import { PROFESSIONS, PROFESSION_LABEL } from "@/lib/domain";
 import { refreshWeek, useWeek } from "@/lib/client/api";
+import { useLiveShifts } from "@/lib/client/use-live-shifts";
+import { LiveBadge } from "@/components/live-badge";
 import { useWeekParam } from "@/lib/client/use-week";
 import { clinicToday, formatClinicDate } from "@/lib/time";
 import { Button, Empty, cx } from "@/components/ui";
@@ -28,6 +30,38 @@ import { ShiftEditor } from "@/components/shift-editor";
 export function DashboardScreen({ initialWeek }: { initialWeek: string }) {
   const [week, goToWeek] = useWeekParam(initialWeek);
   const { data, isLoading } = useWeek(week);
+
+  /*
+   * Live updates. The stream says something changed and we refetch the week --
+   * the server stays the source of truth, so there is no partial-update merge
+   * logic to get wrong. When the stream is unavailable the hook reports
+   * "polling" and the interval below takes over, so the board is never silently
+   * stale.
+   *
+   * `recentlyChanged` briefly marks what moved. Without it a live update in a
+   * dense week is invisible: numbers change somewhere on screen and nothing
+   * draws the eye to them.
+   */
+  const [recentlyChanged, setRecentlyChanged] = useState<Set<string>>(new Set());
+  const live = useLiveShifts((shiftId) => {
+    refreshWeek(week);
+    if (!shiftId) return;
+    setRecentlyChanged((prev) => new Set(prev).add(shiftId));
+    setTimeout(
+      () =>
+        setRecentlyChanged((prev) => {
+          const next = new Set(prev);
+          next.delete(shiftId);
+          return next;
+        }),
+      1800,
+    );
+  });
+  useEffect(() => {
+    if (live !== "polling") return;
+    const id = setInterval(() => refreshWeek(week), 8000);
+    return () => clearInterval(id);
+  }, [live, week]);
 
   const [selected, setSelected] = useState<ShiftView | null>(null);
   const [editing, setEditing] = useState<ShiftView | null>(null);
@@ -73,6 +107,7 @@ export function DashboardScreen({ initialWeek }: { initialWeek: string }) {
   return (
     <div className="flex flex-col gap-6">
       <WeekNav week={week} onChange={goToWeek}>
+        <LiveBadge status={live} />
         <Button variant="solid" onClick={() => openEditor(null, days[0] ?? week)}>
           <Plus /> New shift
         </Button>
@@ -131,6 +166,7 @@ export function DashboardScreen({ initialWeek }: { initialWeek: string }) {
                 shifts={byDay.get(day) ?? []}
                 index={index}
                 loading={isLoading && !data}
+                changedIds={recentlyChanged}
                 onSelect={setSelected}
                 onAdd={() => openEditor(null, day)}
               />
@@ -213,6 +249,7 @@ function DayColumn({
   shifts,
   index,
   loading,
+  changedIds,
   onSelect,
   onAdd,
 }: {
@@ -220,6 +257,7 @@ function DayColumn({
   shifts: ShiftView[];
   index: number;
   loading: boolean;
+  changedIds: Set<string>;
   onSelect: (shift: ShiftView) => void;
   onAdd: () => void;
 }) {
@@ -277,6 +315,7 @@ function DayColumn({
               <ShiftCard
                 key={shift.id}
                 shift={shift}
+                changed={changedIds.has(shift.id)}
                 delay={index * 45 + i * 25}
                 onClick={() => onSelect(shift)}
               />
@@ -299,10 +338,12 @@ function DayColumn({
 function ShiftCard({
   shift,
   delay,
+  changed,
   onClick,
 }: {
   shift: ShiftView;
   delay: number;
+  changed: boolean;
   onClick: () => void;
 }) {
   /*
@@ -323,9 +364,14 @@ function ShiftCard({
       type="button"
       onClick={onClick}
       aria-label={label}
+      // A stable hook for the live-update and end-to-end checks to find one
+      // specific card without depending on its text or position.
+      data-shift-id={shift.id}
+      data-status={shift.status}
       style={{ animationDelay: `${Math.min(delay, 400)}ms` }}
       className={cx(
-        "rise relative w-full overflow-hidden rounded-[3px] border border-rule bg-paper-raised",
+        "rise relative w-full overflow-hidden rounded-[3px] border bg-paper-raised",
+        changed ? "flash border-focus" : "border-rule",
         "px-2.5 py-2 pl-3 text-left transition-all",
         "hover:border-ink hover:shadow-[0_2px_10px_-4px_rgba(0,0,0,0.35)]",
       )}
