@@ -5,7 +5,7 @@ staff (doctors, nurses, receptionists) claim shifts for themselves. The clinic's
 spreadsheet exports are imported through a validating pipeline that reports on every
 row it rejects or merges.
 
-**Live URL:** _added in §12_
+**Live URL:** _pending deployment — see [Deploying](#deploying)._
 
 ---
 
@@ -50,6 +50,55 @@ npm run seed
 npm run dev
 ```
 </details>
+
+---
+
+## Deploying
+
+Vercel for the app, MongoDB Atlas for the database.
+
+**1. Create a free M0 cluster** at [cloud.mongodb.com](https://cloud.mongodb.com).
+Add a database user, and under *Network Access* allow `0.0.0.0/0` — Vercel's
+functions have no fixed egress IPs, so an allow-list of specific addresses will
+not work.
+
+**2. Deploy.**
+
+```bash
+npx vercel            # link the project
+npx vercel --prod
+```
+
+**3. Set the environment variables** (Vercel dashboard, or `vercel env add`):
+
+| Variable | Value |
+|---|---|
+| `MONGODB_URI` | the Atlas SRV string, with a database name — `…mongodb.net/clinic?retryWrites=true&w=majority` |
+| `AUTH_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `CLINIC_TZ` | `Europe/London` |
+| `NEXT_PUBLIC_CLINIC_TZ` | `Europe/London` — must match `CLINIC_TZ` |
+
+**4. Seed it**, pointing the same script at Atlas:
+
+```bash
+MONGODB_URI="<atlas-uri>" FORCE_RESEED=true npm run seed
+```
+
+That runs the importer against the provided CSVs, so the deployed site is
+populated by exactly the pipeline the app itself uses.
+
+### Cold starts
+
+**Atlas M0 does not sleep** on the timescale of a review — it only pauses after
+30 days of zero connections, so the database is warm. Vercel functions do cold
+start, so the very first request after a period of inactivity takes roughly a
+second; everything after that is warm.
+
+Two M0 limits worth knowing rather than discovering: it throttles at **100
+operations/second**, and it is a genuine replica set, which is what allows the
+transactions and change streams this app depends on. The dashboard renders a
+whole week from a single indexed query specifically to stay well inside that
+throttle.
 
 ---
 
