@@ -8,7 +8,10 @@ RUN apk add --no-cache libc6-compat
 
 # ---- deps -------------------------------------------------------------------
 FROM base AS deps
-COPY package.json package-lock.json* ./
+# .npmrc matters here: it carries the peer-dependency resolution that makes the
+# lockfile installable with `npm ci`. Without it the build fails on a conflict
+# inside optional wasm fallback binaries that are never actually loaded.
+COPY package.json package-lock.json* .npmrc ./
 RUN npm ci
 
 # ---- dev --------------------------------------------------------------------

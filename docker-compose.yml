@@ -29,7 +29,10 @@ services:
       target: dev
     container_name: clinic-app
     ports:
-      - "3000:3000"
+      # Overridable, because 3000 is a popular port and a reviewer who already
+      # has something on it should not have to edit this file:
+      #   APP_PORT=3300 docker compose up
+      - "${APP_PORT:-3000}:3000"
     environment:
       # directConnection=true, and deliberately NO replicaSet= parameter: the
       # atlas-local image names its replica set after the container ID rather than
