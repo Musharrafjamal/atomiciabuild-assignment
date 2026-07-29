@@ -145,7 +145,47 @@ same rota.
 
 ## Tests
 
-_Added in §15._
+```bash
+npm test
+```
+
+One command. It runs 149 unit and integration tests, then 8 end-to-end tests in a
+real browser — **157 in total**. Both stages need the Docker MongoDB running
+(`docker compose up -d mongo`); nothing else.
+
+Neither stage touches the development database. Unit and integration tests use
+`clinic_test`; the end-to-end suite gets `clinic_e2e`, re-seeded from the provided
+CSVs before every run so it always starts from a known rota.
+
+<details>
+<summary>Running a stage on its own</summary>
+
+```bash
+npm run test:unit      # vitest: parsers, rules, concurrency
+npm run test:e2e       # playwright: full stack in a browser
+npm run test:watch     # vitest in watch mode
+npm run check          # typecheck + lint
+```
+
+The first `npm run test:e2e` needs browsers: `npx playwright install chromium`.
+</details>
+
+### What is actually covered
+
+| | |
+|---|---|
+| **Parsing** | Every normaliser against the *real* garbage in the supplied CSVs — `2026-02-30`, `08-13-2026`, `10:00+1`, `12:00→12:00`, `(at)` addresses, duplicate rows, `two nurses and a doctor`. |
+| **Concurrency** | 8 nurses racing one slot; 12 racing three; one person firing five overlapping claims at once; interleaved claim/release. Run against a real replica set, not a mock. |
+| **Shift editing** | Claim re-validation, the preview-then-confirm flow, stale-preview rejection, and that a moved shift takes its claimants' bookings with it. |
+| **Recurring shifts** | Per-occurrence edit and delete surviving a series change, and a series spanning the October DST boundary. |
+| **End-to-end** | Sign-in for both roles, claiming, the overlap refusal appearing on screen with its reason, staff being refused manager screens *and* manager APIs, assignment updating the board, the edit warning, and the import report. |
+
+Two scripts verify things a unit test cannot:
+
+```bash
+npx tsx scripts/responsive-check.ts   # no horizontal overflow at 375 / 768 / 1440
+npx tsx scripts/live-check.ts         # live updates across two real sessions
+```
 
 ---
 

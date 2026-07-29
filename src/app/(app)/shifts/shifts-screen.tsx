@@ -211,6 +211,9 @@ function ShiftRow({
 
   return (
     <div
+      // A stable hook for end-to-end tests to address one row without relying on
+      // its position or wording.
+      data-shift-row={shift.id}
       className={cx(
         "relative overflow-hidden rounded-[3px] border bg-paper-raised transition-colors",
         shift.claimedByMe ? "border-ink" : "border-rule",

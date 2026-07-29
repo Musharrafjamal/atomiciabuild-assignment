@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button, Field, Notice, inputClass } from "@/components/ui";
 
@@ -14,6 +14,18 @@ export default function LoginPage() {
 
 function LoginForm() {
   const params = useSearchParams();
+  const formRef = useRef<HTMLFormElement>(null);
+
+  /*
+   * Marks the form as hydrated once React has taken over.
+   *
+   * Set imperatively rather than through state: this is a signal for the
+   * end-to-end tests, not something the UI renders from, and driving a render
+   * from it would be a cascading-render smell.
+   */
+  useEffect(() => {
+    formRef.current?.setAttribute("data-hydrated", "true");
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +120,18 @@ function LoginForm() {
             Use your clinic email address.
           </p>
 
-          <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
+          <form
+            ref={formRef}
+            /*
+             * method="post" matters even though this handler always calls
+             * preventDefault. Before hydration the form is plain HTML, and the
+             * default GET submission would put the typed password into the URL
+             * and the browser history. A POST cannot leak it that way.
+             */
+            method="post"
+            onSubmit={submit}
+            className="mt-7 flex flex-col gap-4"
+          >
             <Field label="Email">
               <input
                 className={inputClass}
