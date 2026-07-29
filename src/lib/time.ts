@@ -169,6 +169,31 @@ export function formatClinicDate(
   }).format(instant);
 }
 
+/** Clinic-local day of week for a calendar date. 0=Sunday..6=Saturday. */
+export function clinicWeekday(isoDate: string): number {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return TZDate.tz(CLINIC_TZ, year, month - 1, day, 12, 0).getDay();
+}
+
+/**
+ * Every clinic-local calendar day from `fromIso` to `toIso`, inclusive.
+ *
+ * Steps in calendar days rather than fixed 24-hour increments, so a range that
+ * spans a DST change neither repeats nor skips a day.
+ */
+export function eachClinicDay(fromIso: string, toIso: string): string[] {
+  const [year, month, day] = fromIso.split("-").map(Number);
+  const days: string[] = [];
+
+  for (let offset = 0; offset < 3660; offset++) {
+    const stepped = TZDate.tz(CLINIC_TZ, year, month - 1, day + offset, 12, 0);
+    const key = clinicDayKey(new Date(stepped.getTime()));
+    if (key > toIso) break;
+    days.push(key);
+  }
+  return days;
+}
+
 /** Shift `isoDate` by whole clinic-local weeks; used by dashboard prev/next. */
 export function addWeeks(isoDate: string, delta: number): string {
   const [year, month, day] = isoDate.split("-").map(Number);

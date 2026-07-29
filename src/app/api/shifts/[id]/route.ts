@@ -4,6 +4,9 @@ import { handler, ok, readJson } from "@/lib/api/respond";
 import { toShiftView } from "@/lib/api/views";
 import { requireManager } from "@/lib/auth/guards";
 import { applyShiftEdit, deleteShift, previewShiftEdit } from "@/lib/rules/shifts";
+import { detachOccurrence, excludeOccurrence } from "@/lib/rules/series";
+import { getDb } from "@/lib/db/client";
+import { COLLECTIONS, type ShiftDoc } from "@/lib/db/schema";
 import { notFound } from "@/lib/errors";
 
 type Context = { params: Promise<{ id: string }> };
@@ -55,12 +58,30 @@ export const PATCH = handler(async (request: Request, context: Context) => {
     input,
     input.expectedUpdatedAt,
   );
+
+  // Editing one occurrence of a recurring shift detaches it, so a later change
+  // to the series leaves this one alone. That is what "edit a single occurrence
+  // without breaking the series" requires.
+  if (shift.seriesId) await detachOccurrence(shift._id);
+
   return ok({ shift: toShiftView(shift), released });
 });
 
 /** DELETE /api/shifts/:id — releases every claim as part of the same transaction. */
 export const DELETE = handler(async (_request: Request, context: Context) => {
   await requireManager();
-  await deleteShift(await shiftIdFrom(context));
+  const shiftId = await shiftIdFrom(context);
+
+  // Read before deleting: if this is a series occurrence, the date has to be
+  // recorded as an exception or regenerating the series would resurrect it.
+  const db = await getDb();
+  const existing = await db
+    .collection<ShiftDoc>(COLLECTIONS.shifts)
+    .findOne({ _id: shiftId });
+  if (!existing) throw notFound("That shift");
+
+  await deleteShift(shiftId);
+  await excludeOccurrence(existing);
+
   return ok({ ok: true });
 });

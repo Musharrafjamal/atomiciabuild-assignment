@@ -312,7 +312,50 @@ from everyone who held it.
 
 ## 6. Recurring shifts
 
-_§13_
+### Occurrences are materialised, not computed
+
+A series stores its rule (`weekdays`, times, requirements, date range) and then
+**generates real shift documents**, each carrying a `seriesId` and an
+`occurrenceDate`. The alternative — expanding the rule on every read — was
+rejected for three reasons:
+
+1. **A claim has to attach to something.** Claims live on a shift document. If an
+   occurrence were virtual, claiming a recurring shift would need an entirely
+   separate code path from claiming a one-off — exactly the divergence that
+   everything else here is arranged to avoid.
+2. **The dashboard stays one query per week.** A computed series would have to be
+   expanded on every read, on top of the range query.
+3. **Editing one occurrence becomes editing a shift.** No new concept needed.
+
+The cost is that changing a series has to reconcile the documents it generated,
+which `updateSeries` does explicitly.
+
+### Editing or deleting one occurrence
+
+- **Editing one occurrence** sets `detachedFromSeries`. Later changes to the
+  series skip it. It keeps its `seriesId`, so it is still recognisably part of the
+  series and is still cleaned up if the series is deleted.
+- **Deleting one occurrence** adds its date to `series.exceptions`, so
+  regenerating cannot resurrect it. Both are covered by tests.
+
+### What a series change deliberately does *not* touch
+
+- **Detached occurrences** — the point of detaching.
+- **Occurrences somebody has claimed.** Silently deleting a shift a nurse is
+  rostered on is precisely the behaviour rejected in §5. They are kept and
+  reported back (`skippedClaimed`) so the manager removes them deliberately.
+- **Past occurrences.** The rota before today is a record of what happened, not a
+  plan to be revised.
+
+Deleting a whole series removes future unclaimed occurrences and **demotes the
+rest to ordinary one-off shifts** by clearing their `seriesId`, rather than
+deleting work people are committed to.
+
+Time validation is shared with the CSV importer, so a recurring shift cannot be
+something a one-off shift would be refused for. Occurrence generation steps in
+clinic-local calendar days rather than 24-hour increments, so a series spanning
+the October DST change neither repeats nor skips a day — there is a test for
+exactly that.
 
 ## 7. Live updates
 

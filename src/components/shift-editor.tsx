@@ -5,7 +5,7 @@ import type { ShiftView } from "@/lib/api/views";
 import type { EditConflict } from "@/lib/rules/edit-conflicts";
 import { PROFESSIONS, PROFESSION_LABEL } from "@/lib/domain";
 import { ApiFailure, api } from "@/lib/client/api";
-import { Button, Field, Notice, inputClass } from "./ui";
+import { Button, Field, Notice, cx, inputClass } from "./ui";
 import { Dialog } from "./dialog";
 
 /**
@@ -24,6 +24,27 @@ interface Draft {
   startTime: string;
   endTime: string;
   requirements: Record<string, number>;
+  /** Recurrence is create-only; editing always targets a single occurrence. */
+  repeats: boolean;
+  weekdays: number[];
+  untilDate: string;
+}
+
+const WEEKDAYS = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+];
+
+/** Four weeks on from a YYYY-MM-DD date, as a sensible default end. */
+function fourWeeksAfter(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + 28));
+  return dt.toISOString().slice(0, 10);
 }
 
 function draftFrom(shift: ShiftView | null, day: string): Draft {
@@ -33,6 +54,9 @@ function draftFrom(shift: ShiftView | null, day: string): Draft {
       startTime: "08:00",
       endTime: "16:00",
       requirements: { doctor: 0, nurse: 1, receptionist: 0 },
+      repeats: false,
+      weekdays: [],
+      untilDate: fourWeeksAfter(day),
     };
   }
   return {
@@ -40,6 +64,9 @@ function draftFrom(shift: ShiftView | null, day: string): Draft {
     startTime: shift.startLabel,
     endTime: shift.endLabel,
     requirements: { ...shift.requirements },
+    repeats: false,
+    weekdays: [],
+    untilDate: fourWeeksAfter(shift.date),
   };
 }
 
@@ -83,7 +110,18 @@ function EditorForm({ open, shift, defaultDay, onClose, onSaved }: EditorProps) 
 
     try {
       if (!isEdit) {
-        await api.post("/api/shifts", draft);
+        if (draft.repeats) {
+          await api.post("/api/series", {
+            weekdays: draft.weekdays,
+            startTime: draft.startTime,
+            endTime: draft.endTime,
+            fromDate: draft.date,
+            untilDate: draft.untilDate,
+            requirements: draft.requirements,
+          });
+        } else {
+          await api.post("/api/shifts", draft);
+        }
         onSaved();
         onClose();
         return;
@@ -146,10 +184,14 @@ function EditorForm({ open, shift, defaultDay, onClose, onSaved }: EditorProps) 
             <Button
               variant="solid"
               busy={busy}
-              disabled={total === 0}
+              disabled={total === 0 || (draft.repeats && draft.weekdays.length === 0)}
               onClick={() => save(false)}
             >
-              {isEdit ? "Save changes" : "Create shift"}
+              {isEdit
+                ? "Save changes"
+                : draft.repeats
+                  ? "Create repeating shift"
+                  : "Create shift"}
             </Button>
           </>
         )
@@ -251,6 +293,92 @@ function EditorForm({ open, shift, defaultDay, onClose, onSaved }: EditorProps) 
               </p>
             )}
           </fieldset>
+
+          {/* Recurrence — create only. Editing always targets one occurrence. */}
+          {!isEdit && (
+            <div className="flex flex-col gap-3 border-t border-rule pt-4">
+              <label className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={draft.repeats}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      repeats: e.target.checked,
+                      // Seed the weekday picker with the day already chosen, so
+                      // ticking the box produces something valid immediately.
+                      weekdays: e.target.checked
+                        ? [new Date(`${draft.date}T12:00:00Z`).getUTCDay()]
+                        : [],
+                    })
+                  }
+                  className="size-4 accent-[var(--ink)]"
+                />
+                <span className="text-sm font-medium text-ink">Repeat weekly</span>
+              </label>
+
+              {draft.repeats && (
+                <div className="flex flex-col gap-3 pl-6">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="label">On these days</span>
+                    <div className="flex flex-wrap gap-1">
+                      {WEEKDAYS.map((weekday) => {
+                        const on = draft.weekdays.includes(weekday.value);
+                        return (
+                          <button
+                            key={weekday.value}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                weekdays: on
+                                  ? draft.weekdays.filter((d) => d !== weekday.value)
+                                  : [...draft.weekdays, weekday.value],
+                              })
+                            }
+                            className={cx(
+                              "h-8 w-11 rounded-[3px] border text-xs font-medium transition-colors",
+                              on
+                                ? "border-ink bg-ink text-paper"
+                                : "border-rule-strong bg-paper-raised text-ink-muted hover:border-ink hover:text-ink",
+                            )}
+                          >
+                            {weekday.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <Field label="Until">
+                    <input
+                      className={inputClass}
+                      type="date"
+                      min={draft.date}
+                      value={draft.untilDate}
+                      onChange={(e) =>
+                        setDraft({ ...draft, untilDate: e.target.value })
+                      }
+                    />
+                  </Field>
+
+                  {draft.weekdays.length === 0 && (
+                    <p className="text-xs text-empty">
+                      Choose at least one day of the week.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {isEdit && shift.isRecurring && (
+            <Notice tone="info">
+              This shift repeats. Saving changes only this occurrence — the rest of
+              the series is left as it is.
+            </Notice>
+          )}
 
           {isEdit && shift.claims.length > 0 && (
             <Notice tone="info">
