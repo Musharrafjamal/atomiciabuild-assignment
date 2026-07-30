@@ -7,7 +7,7 @@ import {
   parseTime,
   type DateFormatProfile,
 } from "./datetime";
-import { durationHours } from "@/lib/time";
+import { clinicDayKey, clinicTimeLabel, durationHours } from "@/lib/time";
 
 // Fixtures are verbatim values from the provided data/shifts.csv.
 
@@ -154,7 +154,12 @@ describe("buildShiftInterval", () => {
     if (!result.ok) return;
     expect(durationHours(result.value.startAt, result.value.endAt)).toBe(8);
     expect(result.value.crossesMidnight).toBe(true);
-    expect(result.value.endAt.toISOString()).toBe("2026-08-30T05:00:00.000Z");
+    // Asserted in clinic-local terms rather than as a fixed UTC instant: what
+    // this test is about is the midnight inference, and the absolute instant
+    // legitimately differs with the configured zone.
+    expect(clinicTimeLabel(result.value.startAt)).toBe("22:00");
+    expect(clinicTimeLabel(result.value.endAt)).toBe("06:00");
+    expect(clinicDayKey(result.value.endAt)).toBe("2026-08-30");
   });
 
   it("treats a 00:00 end as the following midnight", () => {

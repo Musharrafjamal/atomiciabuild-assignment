@@ -11,13 +11,22 @@ import { TZDate } from "@date-fns/tz";
  * makes it `aStart < bEnd && aEnd > bStart`.
  */
 /**
- * Read from the public variable first so client components resolve the same zone
- * as the server. `process.env.CLINIC_TZ` is not inlined into the browser bundle,
- * so relying on it alone would silently fall back to the default on the client
- * and put a night shift on the wrong day for any clinic outside Europe/London.
+ * The zone the clinic operates in.
+ *
+ * Read at call time rather than captured once at import. Configuration frozen at
+ * module scope is awkward to test -- every zone-conversion test would need a
+ * module reset -- and reading it per call costs nothing measurable.
+ *
+ * The public variable comes first because `process.env.CLINIC_TZ` is not inlined
+ * into the browser bundle: relying on it alone would leave client components
+ * silently falling back to the default and rendering a night shift on the wrong
+ * day for any clinic outside that zone.
  */
-export const CLINIC_TZ =
-  process.env.NEXT_PUBLIC_CLINIC_TZ || process.env.CLINIC_TZ || "Europe/London";
+export function clinicTz(): string {
+  return (
+    process.env.NEXT_PUBLIC_CLINIC_TZ || process.env.CLINIC_TZ || "Asia/Kolkata"
+  );
+}
 
 /** A wall-clock time of day, already validated. */
 export interface WallTime {
@@ -43,7 +52,7 @@ export function clinicInstant(
   // TZDate months are 0-indexed. Passing `day + dayOffset` lets the Date
   // constructor roll over month and year boundaries for us (Aug 31 + 1 -> Sep 1).
   const tzd = TZDate.tz(
-    CLINIC_TZ,
+    clinicTz(),
     year,
     month - 1,
     day + dayOffset,
@@ -80,7 +89,7 @@ export function durationHours(start: Date, end: Date): number {
  * starting 22:00 belongs to that day's column even though it ends the next day.
  */
 export function clinicDayKey(instant: Date): string {
-  const tzd = new TZDate(instant.getTime(), CLINIC_TZ);
+  const tzd = new TZDate(instant.getTime(), clinicTz());
   const y = tzd.getFullYear();
   const m = String(tzd.getMonth() + 1).padStart(2, "0");
   const d = String(tzd.getDate()).padStart(2, "0");
@@ -89,7 +98,7 @@ export function clinicDayKey(instant: Date): string {
 
 /** Clinic-local wall-clock time of an instant, as `HH:MM`. */
 export function clinicTimeLabel(instant: Date): string {
-  const tzd = new TZDate(instant.getTime(), CLINIC_TZ);
+  const tzd = new TZDate(instant.getTime(), clinicTz());
   return `${String(tzd.getHours()).padStart(2, "0")}:${String(
     tzd.getMinutes(),
   ).padStart(2, "0")}`;
@@ -103,13 +112,13 @@ export function clinicTimeLabel(instant: Date): string {
  */
 export function weekBounds(isoDate: string): { start: Date; end: Date } {
   const [year, month, day] = isoDate.split("-").map(Number);
-  const midday = TZDate.tz(CLINIC_TZ, year, month - 1, day, 12, 0);
+  const midday = TZDate.tz(clinicTz(), year, month - 1, day, 12, 0);
   // getDay(): 0=Sunday..6=Saturday. Map to days-since-Monday.
   const daysSinceMonday = (midday.getDay() + 6) % 7;
 
-  const start = TZDate.tz(CLINIC_TZ, year, month - 1, day - daysSinceMonday, 0, 0);
+  const start = TZDate.tz(clinicTz(), year, month - 1, day - daysSinceMonday, 0, 0);
   const end = TZDate.tz(
-    CLINIC_TZ,
+    clinicTz(),
     year,
     month - 1,
     day - daysSinceMonday + 7,
@@ -126,9 +135,9 @@ export function weekDayKeys(isoDate: string): string[] {
   for (let i = 0; i < 7; i++) {
     // Step in clinic-local calendar days, not fixed 24h increments, so the week
     // stays aligned across a DST boundary.
-    const tzd = new TZDate(start.getTime(), CLINIC_TZ);
+    const tzd = new TZDate(start.getTime(), clinicTz());
     const stepped = TZDate.tz(
-      CLINIC_TZ,
+      clinicTz(),
       tzd.getFullYear(),
       tzd.getMonth(),
       tzd.getDate() + i,
@@ -165,14 +174,14 @@ export function formatClinicDate(
 
   return new Intl.DateTimeFormat("en-GB", {
     ...options,
-    timeZone: CLINIC_TZ,
+    timeZone: clinicTz(),
   }).format(instant);
 }
 
 /** Clinic-local day of week for a calendar date. 0=Sunday..6=Saturday. */
 export function clinicWeekday(isoDate: string): number {
   const [year, month, day] = isoDate.split("-").map(Number);
-  return TZDate.tz(CLINIC_TZ, year, month - 1, day, 12, 0).getDay();
+  return TZDate.tz(clinicTz(), year, month - 1, day, 12, 0).getDay();
 }
 
 /**
@@ -186,7 +195,7 @@ export function eachClinicDay(fromIso: string, toIso: string): string[] {
   const days: string[] = [];
 
   for (let offset = 0; offset < 3660; offset++) {
-    const stepped = TZDate.tz(CLINIC_TZ, year, month - 1, day + offset, 12, 0);
+    const stepped = TZDate.tz(clinicTz(), year, month - 1, day + offset, 12, 0);
     const key = clinicDayKey(new Date(stepped.getTime()));
     if (key > toIso) break;
     days.push(key);
@@ -197,6 +206,6 @@ export function eachClinicDay(fromIso: string, toIso: string): string[] {
 /** Shift `isoDate` by whole clinic-local weeks; used by dashboard prev/next. */
 export function addWeeks(isoDate: string, delta: number): string {
   const [year, month, day] = isoDate.split("-").map(Number);
-  const tzd = TZDate.tz(CLINIC_TZ, year, month - 1, day + delta * 7, 12, 0);
+  const tzd = TZDate.tz(clinicTz(), year, month - 1, day + delta * 7, 12, 0);
   return clinicDayKey(new Date(tzd.getTime()));
 }

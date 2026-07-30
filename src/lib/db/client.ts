@@ -29,7 +29,7 @@ function uri(): string {
   const value = process.env.MONGODB_URI;
   if (!value) {
     throw new Error(
-      "MONGODB_URI is not set. Copy .env.example to .env.local, or run `docker compose up`.",
+      "MONGODB_URI is not set. Copy .env.example to .env.local and point it at a MongoDB replica set (any Atlas cluster).",
     );
   }
   return value;
@@ -51,10 +51,25 @@ export async function getClient(): Promise<MongoClient> {
   return cache.client;
 }
 
+/**
+ * Atlas hands you a connection string with no database in it
+ * (`…mongodb.net/?appName=Cluster0`), and the driver then quietly defaults to a
+ * database called `test`. That is a bad default to inherit silently, so the name
+ * is resolved explicitly: whatever the URI specifies, else `MONGODB_DB`, else
+ * `clinic`.
+ */
+export const DEFAULT_DB_NAME = "clinic";
+
+export function databaseNameFrom(uri: string): string {
+  // The path segment, if the connection string carries one.
+  const path = uri.split("?")[0].split("/")[3];
+  if (path) return decodeURIComponent(path);
+  return process.env.MONGODB_DB || DEFAULT_DB_NAME;
+}
+
 export async function getDb(): Promise<Db> {
   const client = await getClient();
-  // Database name comes from the connection string path segment.
-  return client.db();
+  return client.db(databaseNameFrom(uri()));
 }
 
 /** Closes the pooled client. Used by scripts and test teardown, never by request code. */

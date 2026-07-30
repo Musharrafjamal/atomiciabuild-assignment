@@ -24,10 +24,23 @@ The comparison is deliberately **half-open**. Back-to-back shifts (`08:00–16:0
 then `16:00–00:00`) share an endpoint, and a nurse may legitimately work both; a
 closed-interval test would reject the second claim. This is covered by a test.
 
-The clinic's timezone is configuration (`CLINIC_TZ`, default `Europe/London`) rather
-than a hardcoded offset, so BST/GMT transitions are handled by the timezone database.
-Tests assert both a summer and a winter date, and that a week spanning the October
-DST change still contains exactly seven distinct days.
+The clinic's timezone is configuration (`CLINIC_TZ`, currently `Asia/Kolkata`)
+rather than a hardcoded offset, and it is read at call time rather than captured at
+import, so it is testable and could vary per deployment.
+
+The timezone tests deliberately **pin two zones rather than testing the configured
+one**, because each exposes a different class of bug:
+
+- **Europe/London** has daylight saving, which is where calendar stepping and week
+  alignment go wrong. A week spanning the October change must still contain seven
+  distinct days.
+- **Asia/Kolkata** is UTC+5:30, which is where code that assumes whole-hour offsets
+  goes wrong.
+
+Testing only the configured zone would leave one of those two uncovered — and since
+India has no DST, testing only India would silently drop all the DST coverage. A
+separate block asserts that whatever zone is configured is actually honoured, and
+that the public variable wins so the browser and the server agree.
 
 ### Claims are embedded in the shift document
 
@@ -145,7 +158,7 @@ password, issue a signed token, read it back, and know a role. Owning that
 outright also means every line is explainable, which the brief explicitly asks for.
 
 `bcryptjs` over the native `bcrypt` binding so there is no compilation step in the
-Docker image and the same code runs unchanged on Vercel.
+build step and the same code runs unchanged on Vercel.
 
 ### The proxy is not the security boundary
 

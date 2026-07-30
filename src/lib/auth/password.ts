@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 
 /**
  * bcryptjs rather than the native `bcrypt` binding: it is pure JavaScript, so it
- * needs no compilation step in the Docker image and runs unchanged on Vercel.
+ * needs no native compilation and runs unchanged on Vercel.
  */
 export const BCRYPT_COST = 10;
 

@@ -14,7 +14,7 @@ row it rejects or merges.
 | Layer | Choice | Why |
 |---|---|---|
 | Framework | Next.js 16.2 (App Router), React 19, TypeScript | One deployable unit; Route Handlers keep every business rule on the server. |
-| Database | MongoDB — Atlas M0 in production, `mongodb/mongodb-atlas-local` in Docker | Both are replica sets, so multi-document **transactions** and **change streams** behave identically in development and production. |
+| Database | MongoDB Atlas (free M0 tier is enough) | A replica set, which is what makes multi-document **transactions** and **change streams** available — the claim engine and live updates depend on them respectively. |
 | Data access | Official `mongodb` driver + Zod — no ODM | The concurrency guarantees live inside `findOneAndUpdate` filter predicates; an ODM abstracts exactly that layer. Zod validates both API input and CSV rows. |
 | Auth | `bcryptjs` + `jose` JWT in an httpOnly cookie | Small, explicit, no framework coupling. |
 | UI | Tailwind CSS v4 + shadcn/ui | Fast path to a polished, responsive interface. |
@@ -25,31 +25,36 @@ row it rejects or merges.
 
 ## Running locally
 
-One command, no prior setup beyond Docker:
-
 ```bash
-docker compose up
-```
-
-This starts MongoDB as a single-node replica set, waits for it to elect a primary,
-runs the CSV import to seed the database, and serves the app at
-**http://localhost:3000**.
-
-To wipe and re-import: `FORCE_RESEED=true docker compose up`.
-
-<details>
-<summary>Running without Docker</summary>
-
-Requires a MongoDB **replica set** (not a standalone `mongod` — transactions and
-change streams both need one).
-
-```bash
-cp .env.example .env.local   # then point MONGODB_URI at your replica set
 npm install
-npm run seed
-npm run dev
+cp .env.example .env.local    # then fill in MONGODB_URI and AUTH_SECRET
+npm run seed                  # imports the CSVs into your database
+npm run dev                   # http://localhost:3000
 ```
-</details>
+
+`npm run seed` is idempotent — it exits without touching anything if the database
+already has data. To wipe and re-import: `FORCE_RESEED=true npm run seed`.
+
+### The one requirement worth knowing
+
+**MongoDB must be a replica set, not a standalone `mongod`.** The claim engine uses
+multi-document transactions and live updates use change streams; neither exists on
+a standalone server.
+
+Any MongoDB Atlas cluster satisfies this, including the free M0 tier — which is
+the intended setup and takes a couple of minutes:
+
+1. Create a free cluster at [cloud.mongodb.com](https://cloud.mongodb.com).
+2. Add a database user.
+3. Under **Network Access**, allow your IP (and `0.0.0.0/0` if you will deploy to
+   Vercel, whose functions have no fixed egress addresses).
+4. Copy the connection string into `MONGODB_URI` — **and add a database name to
+   the path**. Atlas gives you `…mongodb.net/?appName=…` with no database in it,
+   and the driver then quietly defaults to one called `test`.
+
+```
+mongodb+srv://user:password@cluster0.xxxxx.mongodb.net/clinic?retryWrites=true&w=majority
+```
 
 ---
 
@@ -75,8 +80,8 @@ npx vercel --prod
 |---|---|
 | `MONGODB_URI` | the Atlas SRV string, with a database name — `…mongodb.net/clinic?retryWrites=true&w=majority` |
 | `AUTH_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `CLINIC_TZ` | `Europe/London` |
-| `NEXT_PUBLIC_CLINIC_TZ` | `Europe/London` — must match `CLINIC_TZ` |
+| `CLINIC_TZ` | `Asia/Kolkata` |
+| `NEXT_PUBLIC_CLINIC_TZ` | `Asia/Kolkata` — must match `CLINIC_TZ` |
 
 **4. Seed it**, pointing the same script at Atlas:
 
@@ -198,13 +203,19 @@ same rota.
 npm test
 ```
 
-One command. It runs 149 unit and integration tests, then 8 end-to-end tests in a
-real browser — **157 in total**. Both stages need the Docker MongoDB running
-(`docker compose up -d mongo`); nothing else.
+One command. It runs 156 unit and integration tests, then 8 end-to-end tests in a
+real browser — **164 in total**. Both stages use the `MONGODB_URI` from
+`.env.local`; nothing else to set up.
 
-Neither stage touches the development database. Unit and integration tests use
-`clinic_test`; the end-to-end suite gets `clinic_e2e`, re-seeded from the provided
-CSVs before every run so it always starts from a known rota.
+**Neither stage touches your data.** The database name in the connection string is
+swapped: integration tests use `clinic_test` and the end-to-end suite uses
+`clinic_e2e`, both in the same cluster, and the E2E database is re-seeded from the
+provided CSVs before every run so it always starts from a known rota.
+
+Against a remote Atlas cluster the suite takes a few minutes — the concurrency
+tests fire many simultaneous claims and each one is a network round trip. That is
+worth it: those guarantees are then proved against a real replica set over a real
+network, not just a local one.
 
 <details>
 <summary>Running a stage on its own</summary>
