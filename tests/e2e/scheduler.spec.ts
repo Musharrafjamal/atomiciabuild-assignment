@@ -20,7 +20,12 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByRole("textbox", { name: /email/i }).fill(email);
   await page.locator('input[type="password"]').fill(password);
   await Promise.all([
-    page.waitForURL((url) => !url.pathname.startsWith("/login")),
+    // `commit`, not the default `load`: the signed-in screens hold a server-sent
+    // events connection open, so the load event can fail to fire on a page that
+    // is working perfectly.
+    page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+      waitUntil: "commit",
+    }),
     page.getByRole("button", { name: "Sign in", exact: true }).click(),
   ]);
 }

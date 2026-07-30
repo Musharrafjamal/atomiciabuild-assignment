@@ -24,11 +24,18 @@ const SCREENS = [
 ];
 
 async function signIn(page: Page, email: string, password: string) {
-  await page.goto(`${BASE}/login`);
+  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+  await page.locator("form[data-hydrated='true']").waitFor({ timeout: 30000 });
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', password);
   await Promise.all([
-    page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15000 }),
+    // `commit` rather than the default `load`: once signed in the page opens a
+    // server-sent-events connection that stays open, so the load event may never
+    // fire and waiting for it would time out on a page that is working fine.
+    page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+      timeout: 30000,
+      waitUntil: "commit",
+    }),
     page.click('button[type="submit"]'),
   ]);
 }
@@ -47,9 +54,17 @@ async function main() {
     await signIn(page, "manager@clinic.test", "manager1234");
 
     for (const screen of SCREENS) {
-      await page.goto(`${BASE}${screen.path}`);
-      await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(600);
+      await page.goto(`${BASE}${screen.path}`, { waitUntil: "domcontentloaded" });
+      // Not `networkidle`: the live-update stream is a long-lived connection, so
+      // the network is never idle on the signed-in screens. Wait for content that
+      // only exists after the week has loaded instead.
+      await page
+        .locator("[data-shift-id], [data-shift-row], main")
+        .first()
+        .waitFor({ timeout: 20000 });
+      // Long enough for the staggered entrance to finish, so a screenshot never
+      // catches the board mid-fade and looks like missing data.
+      await page.waitForTimeout(2500);
 
       // The check that matters. A layout is not responsive if the body scrolls
       // sideways -- everything else is taste, this is a defect.

@@ -316,7 +316,7 @@ function DayColumn({
                 key={shift.id}
                 shift={shift}
                 changed={changedIds.has(shift.id)}
-                delay={index * 45 + i * 25}
+                delay={index * 20 + i * 12}
                 onClick={() => onSelect(shift)}
               />
             ))}
@@ -368,7 +368,10 @@ function ShiftCard({
       // specific card without depending on its text or position.
       data-shift-id={shift.id}
       data-status={shift.status}
-      style={{ animationDelay: `${Math.min(delay, 400)}ms` }}
+      // Capped tight: this is an operational board, and a manager scanning for
+      // gaps should not wait on a reveal. The stagger is a hint of order, not a
+      // performance.
+      style={{ animationDelay: `${Math.min(delay, 180)}ms` }}
       className={cx(
         "rise relative w-full overflow-hidden rounded-[3px] border bg-paper-raised",
         changed ? "flash border-focus" : "border-rule",
