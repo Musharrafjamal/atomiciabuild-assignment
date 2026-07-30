@@ -5,7 +5,11 @@ staff (doctors, nurses, receptionists) claim shifts for themselves. The clinic's
 spreadsheet exports are imported through a validating pipeline that reports on every
 row it rejects or merges.
 
-**Live URL:** _pending deployment — see [Deploying](#deploying)._
+**Live URL:** **https://clinic-shift-scheduler-lyart.vercel.app**
+
+Sign in as `manager@clinic.test` / `manager1234` for the coverage board, or as any
+nurse below with `staff1234` to claim shifts. Already seeded from the provided
+CSVs by the importer.
 
 ---
 
@@ -60,7 +64,8 @@ mongodb+srv://user:password@cluster0.xxxxx.mongodb.net/clinic?retryWrites=true&w
 
 ## Deploying
 
-Vercel for the app, MongoDB Atlas for the database.
+Already deployed to Vercel with MongoDB Atlas. These are the steps, for
+reproducing it from scratch.
 
 **1. Create a free M0 cluster** at [cloud.mongodb.com](https://cloud.mongodb.com).
 Add a database user, and under *Network Access* allow `0.0.0.0/0` — Vercel's
